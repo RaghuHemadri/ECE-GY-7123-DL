@@ -66,7 +66,7 @@ def evaluate(model, device, test_loader, criterion, use_mixed_precision):
     with torch.no_grad():
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
-            with torch.cuda.amp.autocast(enabled=use_mixed_precision):
+            with torch.amp.autocast(device_type='cuda', enabled=use_mixed_precision):
                 output = model(data)
                 loss = criterion(output, target)
             total_loss += loss.item()
