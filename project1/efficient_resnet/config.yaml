@@ -1,8 +1,8 @@
 model:
   name: EfficientResNet
   use_bottleneck: False           # Set to True to use bottleneck blocks instead of basic blocks
-  channels: [64, 128, 256]        # Base channels for each stage
-  num_blocks: [4, 4, 3]           # Number of blocks (layers) per stage; change these values to control depth
+  channels: [64, 128, 256, 512]        # Base channels for each stage
+  num_blocks: [6, 6, 6, 6]           # Number of blocks (layers) per stage; change these values to control depth
   squeeze_and_excitation: True    # Include SE modules in blocks
   use_dropout: True               # Enable dropout inside blocks
   dropout_rate: 0.2               # Dropout probability

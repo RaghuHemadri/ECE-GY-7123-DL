@@ -1,2 +1,5 @@
 *.zip
 **/__pycache__/**
+**/*.pyc
+**/trained_models/**
+**/logs/**

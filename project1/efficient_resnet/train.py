@@ -7,7 +7,7 @@ import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 from torchsummary import summary
 
-from models import SEBlock, BasicBlock, Bottleneck, EfficientResNet
+from models import EfficientResNet
 from dataset import CIFAR10PickleDataset
 from optimizations import *
 import os

@@ -1,8 +1,6 @@
 import torch.nn as nn
 import torch.nn.functional as F
 
-
-
 # -------------------------------
 # Depthwise Separable Convolution
 # -------------------------------
@@ -47,7 +45,7 @@ class BasicBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1, use_projection=False, use_se=False, dropout_rate=0.0, use_depthwise=False):
         super(BasicBlock, self).__init__()
 
-        conv_layer = DepthwiseSeparableConv if self.use_depthwise else nn.Conv2d #Changes for depthwise
+        conv_layer = DepthwiseSeparableConv if use_depthwise else nn.Conv2d #Changes for depthwise
 
         self.use_projection = use_projection
         self.use_se = use_se
@@ -96,11 +94,11 @@ class BottleneckBlock(nn.Module):
         self.use_se = use_se
         self.dropout_rate = dropout_rate
         width = out_channels
-        self.conv1 = nn.Conv2d(in_channels, width, kernel_size=1, bias=False)
+        self.conv1 = conv_layer(in_channels, width, kernel_size=1, bias=False)
         self.bn1 = nn.BatchNorm2d(width)
         self.conv2 = conv_layer(width, width, kernel_size=3, stride=stride, padding=1, bias=False)
         self.bn2 = nn.BatchNorm2d(width)
-        self.conv3 = nn.Conv2d(width, out_channels * self.expansion, kernel_size=1, bias=False)
+        self.conv3 = conv_layer(width, out_channels * self.expansion, kernel_size=1, bias=False)
         self.bn3 = nn.BatchNorm2d(out_channels * self.expansion)
         self.relu = nn.ReLU(inplace=True)
         if self.use_projection:
@@ -154,18 +152,19 @@ class EfficientResNet(nn.Module):
         self.layer1 = self._make_layer(block, channels[0], num_blocks[0], stride=1, use_depthwise=self.use_depthwise)   #Changes for depthwise
         self.layer2 = self._make_layer(block, channels[1], num_blocks[1], stride=2, use_depthwise=self.use_depthwise)
         self.layer3 = self._make_layer(block, channels[2], num_blocks[2], stride=2, use_depthwise=self.use_depthwise)
-        final_channels = channels[2] * (block.expansion if self.use_bottleneck else 1)
+        self.layer4 = self._make_layer(block, channels[3], num_blocks[3], stride=2, use_depthwise=self.use_depthwise)
+        final_channels = channels[3] * (block.expansion if self.use_bottleneck else 1)
         self.avg_pool = nn.AdaptiveAvgPool2d((1,1))
         self.fc = nn.Linear(final_channels, 10)
     def _make_layer(self, block, out_channels, blocks, stride, use_depthwise=False): #changes for depthwise
         layers = []
         layers.append(block(self.in_channels, out_channels, stride=stride,
                             use_projection=(self.in_channels != out_channels * block.expansion),
-                            use_se=self.use_se, dropout_rate=self.dropout_rate, use_depthwise = self.use_depthwise)) #changes for depthwise
+                            use_se=self.use_se, dropout_rate=self.dropout_rate, use_depthwise = use_depthwise)) #changes for depthwise
         
         self.in_channels = out_channels * block.expansion
         for _ in range(1, blocks):
-            layers.append(block(self.in_channels, out_channels, use_se=self.use_se, dropout_rate=self.dropout_rate, use_depthwise = self.use_depthwise)) #changes for depthwise
+            layers.append(block(self.in_channels, out_channels, use_se=self.use_se, dropout_rate=self.dropout_rate, use_depthwise = use_depthwise)) #changes for depthwise
         return nn.Sequential(*layers)
     
 
@@ -176,6 +175,7 @@ class EfficientResNet(nn.Module):
         out = self.layer1(out)
         out = self.layer2(out)
         out = self.layer3(out)
+        out = self.layer4(out)
         out = self.avg_pool(out)
         out = out.view(out.size(0), -1)
         out = self.fc(out)
