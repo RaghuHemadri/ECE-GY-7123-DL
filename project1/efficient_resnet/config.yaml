@@ -7,6 +7,9 @@ model:
   use_dropout: True               # Enable dropout inside blocks
   dropout_rate: 0.2               # Dropout probability
   gradient_clip: 0.1              # Gradient norm clipping threshold
+  
+  #Changes for deptwise separable convolutions
+  use_depthwise: true            # Replace standard convolutions with depthwise separable convolutions 
 
 training:
   optimizer: SGD                # SGD with momentum tends to work better on CIFAR-10 from scratch
