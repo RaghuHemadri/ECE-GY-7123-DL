@@ -15,6 +15,8 @@ import os
 from datetime import datetime
 import matplotlib.pyplot as plt
 
+from time import time
+
 # -------------------------------
 # Training Functions
 # -------------------------------
@@ -81,6 +83,8 @@ def evaluate(model, device, test_loader, criterion, use_mixed_precision):
 # -------------------------------
 def main():
     # Load configuration
+    start_time = time()
+    warnings.filterwarnings("ignore")
     with open("config.yaml", "r") as f:
         config = yaml.safe_load(f)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -168,6 +172,9 @@ def main():
     # Save final model
     torch.save(model.state_dict(), os.path.join(model_dir, "final_model.pth"))
 
+    end_time = time()
+    print(f"Training took {end_time - start_time:.2f} seconds")
+
     # Plotting the losses
     plt.figure()
     plt.plot(range(1, config['training']['epochs'] + 1), train_losses, label='Train Loss')
@@ -184,12 +191,14 @@ def main():
         f.write(f"Best Test Accuracy: {best_acc:.2f}%\n")
         f.write(f"Final Train Loss: {train_losses[-1]:.4f}\n")
         f.write(f"Final Test Loss: {test_losses[-1]:.4f}\n")
+        f.write(f"Training Time: {end_time - start_time:.2f} seconds\n")
         # Write model summary to metrics.txt
         f.write("\nModel Summary:\n")
         summary_str = summary(model, (3, 32, 32), verbose=0)
         f.write(str(summary_str))
 
     print(f"Best Test Accuracy: {best_acc:.2f}%")
+
 
 if __name__ == "__main__":
     main()
