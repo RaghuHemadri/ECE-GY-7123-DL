@@ -1,0 +1,20 @@
+# config.yaml
+model:
+  type: "resnet18"          # Options: "resnet18", "resnet30", "resnet50", "resnet101", etc.
+  use_depthwise: true       # Whether to replace standard convolutions with depthwise separable ones.
+  pruning:
+    enabled: true           # Apply pruning after an initial training phase.
+    pruning_ratio: 0.2      # Percentage of channels/filters to prune per conv layer.
+
+training:
+  epochs: 100
+  batch_size: 128
+  learning_rate: 0.001
+  optimizer: "Adam"         # Options: "Adam", "SGD", etc.
+  weight_decay: 1e-4
+  scheduler: "CosineAnnealingLR"  # Options: "CosineAnnealingLR", "StepLR", etc.
+  augmentation:
+    random_crop: true
+    random_flip: true
+    cutout: false           # Set true if you want to experiment with Cutout.
+  seed: 42                  # For reproducibility.

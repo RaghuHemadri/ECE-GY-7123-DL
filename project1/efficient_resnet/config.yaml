@@ -1,0 +1,28 @@
+model:
+  name: EfficientResNet
+  use_bottleneck: False           # Set to True to use bottleneck blocks instead of basic blocks
+  channels: [64, 128, 256]        # Base channels for each stage
+  num_blocks: [4, 4, 3]           # Number of blocks (layers) per stage; change these values to control depth
+  squeeze_and_excitation: True    # Include SE modules in blocks
+  use_dropout: True               # Enable dropout inside blocks
+  dropout_rate: 0.2               # Dropout probability
+  gradient_clip: 0.1              # Gradient norm clipping threshold
+
+training:
+  optimizer: SGD                # SGD with momentum tends to work better on CIFAR-10 from scratch
+  learning_rate: 0.1
+  momentum: 0.9
+  weight_decay: 0.0005          # L2 regularization
+  batch_size: 128
+  epochs: 1
+  lr_scheduler: CosineAnnealingLR
+  data_augmentation: True
+  normalization: True
+  mixup: True                   
+  mixup_alpha: 1.0              
+  cutout: True                
+  autoaugment: False          
+  num_workers: 8
+
+data:
+  cifar10_dir: "../dataset/cifar-10-python/cifar-10-batches-py"  # Store CIFAR-10 data in the current working directory
