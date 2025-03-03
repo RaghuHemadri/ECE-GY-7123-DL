@@ -16,8 +16,8 @@ training:
   learning_rate: 0.1
   momentum: 0.9
   weight_decay: 0.0005          # L2 regularization
-  batch_size: 128
-  epochs: 1
+  batch_size: 256
+  epochs: 500
   lr_scheduler: CosineAnnealingLR
   data_augmentation: True
   normalization: True
@@ -25,7 +25,8 @@ training:
   mixup_alpha: 1.0              
   cutout: True                
   autoaugment: False          
-  num_workers: 8
+  num_workers: 12               # Number of CPU processes to use for data loading
+  pin_memory: True              # Pin memory for faster GPU transfer
 
 data:
   cifar10_dir: "../dataset/cifar-10-python/cifar-10-batches-py"  # Store CIFAR-10 data in the current working directory

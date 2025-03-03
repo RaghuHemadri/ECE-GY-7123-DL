@@ -1,6 +1,7 @@
 import yaml
 
 import torch
+import warnings
 import torch.nn as nn
 import torch.optim as optim
 import torchvision.transforms as transforms
@@ -17,43 +18,57 @@ import matplotlib.pyplot as plt
 # -------------------------------
 # Training Functions
 # -------------------------------
-def train(model, device, train_loader, optimizer, criterion, epoch, config):
+def train(model, device, train_loader, optimizer, criterion, epoch, config, scaler):
     model.train()
     running_loss = 0.0
     use_mixup = config['training'].get('mixup', False)
     mixup_alpha = config['training'].get('mixup_alpha', 1.0)
+    use_mixed_precision = config['training'].get('use_mixed_precision', False)
+    
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
+        
         # Apply Mixup if enabled
         if use_mixup:
             data, targets_a, targets_b, lam = mixup_data(data, target, mixup_alpha)
-            output = model(data)
-            loss = mixup_criterion(criterion, output, targets_a, targets_b, lam)
-        else:
-            output = model(data)
-            loss = criterion(output, target)
-        loss.backward()
+        
+        with torch.amp.autocast(device_type='cuda', enabled=use_mixed_precision):
+            if use_mixup:
+                output = model(data)
+                loss = mixup_criterion(criterion, output, targets_a, targets_b, lam)
+            else:
+                output = model(data)
+                loss = criterion(output, target)
+        
+        scaler.scale(loss).backward()
+        
         # Gradient clipping if configured
         clip_val = config['model'].get('gradient_clip', None)
         if clip_val is not None:
+            scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), clip_val)
-        optimizer.step()
+        
+        scaler.step(optimizer)
+        scaler.update()
+        
         running_loss += loss.item()
         if batch_idx % 100 == 0:
             print(f"Epoch {epoch}, Batch {batch_idx}, Loss: {loss.item():.4f}")
+    
     avg_loss = running_loss / len(train_loader)
     return avg_loss
 
-def evaluate(model, device, test_loader, criterion):
+def evaluate(model, device, test_loader, criterion, use_mixed_precision):
     model.eval()
     correct = 0
     total_loss = 0.0
     with torch.no_grad():
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
-            output = model(data)
-            loss = criterion(output, target)
+            with torch.cuda.amp.autocast(enabled=use_mixed_precision):
+                output = model(data)
+                loss = criterion(output, target)
             total_loss += loss.item()
             pred = output.argmax(dim=1, keepdim=True)
             correct += pred.eq(target.view_as(pred)).sum().item()
@@ -83,9 +98,9 @@ def main():
     train_dataset = CIFAR10PickleDataset(data_dir=data_dir, train=True, transform=train_transform)
     test_dataset = CIFAR10PickleDataset(data_dir=data_dir, train=False, transform=test_transform)
     train_loader = DataLoader(train_dataset, batch_size=config['training']['batch_size'],
-                              shuffle=True, num_workers=config['training']['num_workers'])
+                              shuffle=True, num_workers=config['training']['num_workers'], pin_memory=config['training']['pin_memory'])
     test_loader = DataLoader(test_dataset, batch_size=config['training']['batch_size'],
-                             shuffle=False, num_workers=config['training']['num_workers'])
+                             shuffle=False, num_workers=config['training']['num_workers'], pin_memory=config['training']['pin_memory'])
     
     # Initialize model
     model = EfficientResNet(config).to(device)
@@ -127,14 +142,15 @@ def main():
     with open(os.path.join(model_dir, "config.yaml"), "w") as f:
         yaml.safe_dump(config, f)
 
-        
-
+    use_mixed_precision = config['training'].get('use_mixed_precision', False)
+    scaler = torch.amp.GradScaler(enabled=use_mixed_precision, device='cuda')
+    
     train_losses = []
     test_losses = []
 
     for epoch in range(1, config['training']['epochs'] + 1):
-        train_loss = train(model, device, train_loader, optimizer, criterion, epoch, config)
-        test_loss, test_acc = evaluate(model, device, test_loader, criterion)
+        train_loss = train(model, device, train_loader, optimizer, criterion, epoch, config, scaler)
+        test_loss, test_acc = evaluate(model, device, test_loader, criterion, use_mixed_precision)
         train_losses.append(train_loss)
         test_losses.append(test_loss)
         print(f"Epoch {epoch}: Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.2f}%")
