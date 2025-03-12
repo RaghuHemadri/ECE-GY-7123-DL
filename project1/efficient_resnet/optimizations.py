@@ -25,8 +25,9 @@ def mixup_criterion(criterion, pred, y_a, y_b, lam):
 # -------------------------------
 def get_transforms(config):
     mean = [0.4914, 0.4822, 0.4465]
-    std  = [0.2470, 0.2435, 0.2616]
+    std  = [0.2023, 0.1994, 0.2010]
     transform_list = []
+    transform_list.append(transforms.ToTensor())
     if config['training'].get('autoaugment', False):
         transform_list.append(transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10))
     if config['training'].get('data_augmentation', False):
@@ -34,7 +35,6 @@ def get_transforms(config):
             transforms.RandomCrop(32, padding=4),
             transforms.RandomHorizontalFlip()
         ])
-    transform_list.append(transforms.ToTensor())
     if config['training'].get('normalization', True):
         transform_list.append(transforms.Normalize(mean, std))
     if config['training'].get('cutout', False):

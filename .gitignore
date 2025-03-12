@@ -3,3 +3,5 @@
 **/*.pyc
 **/trained_models/**
 **/logs/**
+**/archive/**
+**/dataset/**

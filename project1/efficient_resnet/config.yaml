@@ -1,22 +1,23 @@
 model:
   name: EfficientResNet
   use_bottleneck: False           # Set to True to use bottleneck blocks instead of basic blocks
-  channels: [64, 128, 256, 512]        # Base channels for each stage
-  num_blocks: [6, 6, 6, 6]           # Number of blocks (layers) per stage; change these values to control depth
+  channels: [64, 128, 256]        # Base channels for each stage
+  num_blocks: [4, 4, 3]           # Number of blocks (layers) per stage; change these values to control depth
   squeeze_and_excitation: True    # Include SE modules in blocks
   use_dropout: True               # Enable dropout inside blocks
-  dropout_rate: 0.2               # Dropout probability
+  dropout_rate: 0.3               # Dropout probability
   gradient_clip: 0.1              # Gradient norm clipping threshold
+  weights_init_type: default      # Weight initialization method
   
   #Changes for deptwise separable convolutions
-  use_depthwise: true            # Replace standard convolutions with depthwise separable convolutions 
+  use_depthwise: false            # Replace standard convolutions with depthwise separable convolutions 
 
 training:
   optimizer: SGD                # SGD with momentum tends to work better on CIFAR-10 from scratch
   learning_rate: 0.1
   momentum: 0.9
   weight_decay: 0.0005          # L2 regularization
-  batch_size: 256
+  batch_size: 128
   epochs: 500
   lr_scheduler: CosineAnnealingLR
   data_augmentation: True
@@ -24,9 +25,13 @@ training:
   mixup: True                   
   mixup_alpha: 1.0              
   cutout: True                
-  autoaugment: False          
+  autoaugment: true          
   num_workers: 12               # Number of CPU processes to use for data loading
   pin_memory: True              # Pin memory for faster GPU transfer
+  use_mixed_precision: False     # Use mixed precision training with NVIDIA Apex
+  resume_training: false               # Load pretrained weights from the official PyTorch model zoo
+  run_id: ""   # Directory to save model checkpoints
+  checkpoint_epoch: 0           # Load model weights from this epoch for evaluation or inference
 
 data:
   cifar10_dir: "../dataset/cifar-10-python/cifar-10-batches-py"  # Store CIFAR-10 data in the current working directory

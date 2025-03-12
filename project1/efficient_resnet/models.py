@@ -152,8 +152,8 @@ class EfficientResNet(nn.Module):
         self.layer1 = self._make_layer(block, channels[0], num_blocks[0], stride=1, use_depthwise=self.use_depthwise)   #Changes for depthwise
         self.layer2 = self._make_layer(block, channels[1], num_blocks[1], stride=2, use_depthwise=self.use_depthwise)
         self.layer3 = self._make_layer(block, channels[2], num_blocks[2], stride=2, use_depthwise=self.use_depthwise)
-        self.layer4 = self._make_layer(block, channels[3], num_blocks[3], stride=2, use_depthwise=self.use_depthwise)
-        final_channels = channels[3] * (block.expansion if self.use_bottleneck else 1)
+        # self.layer4 = self._make_layer(block, channels[3], num_blocks[3], stride=2, use_depthwise=self.use_depthwise)
+        final_channels = channels[-1] * (block.expansion if self.use_bottleneck else 1)
         self.avg_pool = nn.AdaptiveAvgPool2d((1,1))
         self.fc = nn.Linear(final_channels, 10)
     def _make_layer(self, block, out_channels, blocks, stride, use_depthwise=False): #changes for depthwise
@@ -175,7 +175,7 @@ class EfficientResNet(nn.Module):
         out = self.layer1(out)
         out = self.layer2(out)
         out = self.layer3(out)
-        out = self.layer4(out)
+        # out = self.layer4(out)
         out = self.avg_pool(out)
         out = out.view(out.size(0), -1)
         out = self.fc(out)

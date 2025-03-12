@@ -7,70 +7,59 @@ import torch.optim as optim
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 from torchsummary import summary
+import torch.backends.cudnn as cudnn  
 
 from models import EfficientResNet
+from SEResNet import model
 from dataset import CIFAR10PickleDataset
 from optimizations import *
 import os
 from datetime import datetime
 import matplotlib.pyplot as plt
+import math
 
 from time import time
 
 # -------------------------------
 # Training Functions
 # -------------------------------
-def train(model, device, train_loader, optimizer, criterion, epoch, config, scaler):
+def train(model, device, train_loader, optimizer, criterion, epoch, config):
     model.train()
     running_loss = 0.0
     use_mixup = config['training'].get('mixup', False)
     mixup_alpha = config['training'].get('mixup_alpha', 1.0)
-    use_mixed_precision = config['training'].get('use_mixed_precision', False)
-    
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
-        
         # Apply Mixup if enabled
         if use_mixup:
             data, targets_a, targets_b, lam = mixup_data(data, target, mixup_alpha)
-        
-        with torch.amp.autocast(device_type='cuda', enabled=use_mixed_precision):
-            if use_mixup:
-                output = model(data)
-                loss = mixup_criterion(criterion, output, targets_a, targets_b, lam)
-            else:
-                output = model(data)
-                loss = criterion(output, target)
-        
-        scaler.scale(loss).backward()
-        
+            output = model(data)
+            loss = mixup_criterion(criterion, output, targets_a, targets_b, lam)
+        else:
+            output = model(data)
+            loss = criterion(output, target)
+        loss.backward()
         # Gradient clipping if configured
         clip_val = config['model'].get('gradient_clip', None)
         if clip_val is not None:
-            scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), clip_val)
-        
-        scaler.step(optimizer)
-        scaler.update()
-        
+        optimizer.step()
         running_loss += loss.item()
         if batch_idx % 100 == 0:
             print(f"Epoch {epoch}, Batch {batch_idx}, Loss: {loss.item():.4f}")
-    
     avg_loss = running_loss / len(train_loader)
     return avg_loss
 
-def evaluate(model, device, test_loader, criterion, use_mixed_precision):
+def evaluate(model, device, test_loader, criterion):
     model.eval()
     correct = 0
     total_loss = 0.0
     with torch.no_grad():
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
-            with torch.amp.autocast(device_type='cuda', enabled=use_mixed_precision):
-                output = model(data)
-                loss = criterion(output, target)
+            output = model(data)
+            loss = criterion(output, target)
             total_loss += loss.item()
             pred = output.argmax(dim=1, keepdim=True)
             correct += pred.eq(target.view_as(pred)).sum().item()
@@ -94,7 +83,7 @@ def main():
     test_transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize([0.4914, 0.4822, 0.4465],
-                             [0.2470, 0.2435, 0.2616])
+                             [0.2023, 0.1994, 0.2010])
     ])
 
     # Create datasets and loaders
@@ -107,9 +96,40 @@ def main():
                              shuffle=False, num_workers=config['training']['num_workers'], pin_memory=config['training']['pin_memory'])
     
     # Initialize model
-    model = EfficientResNet(config).to(device)
+    # model = EfficientResNet(config).to(device)
+    model = model(config).to(device)
     print("Model Summary:")
     summary(model, (3, 32, 32))
+
+    if device == 'cuda':
+        model = torch.nn.DataParallel(model)
+        cudnn.benchmark = True
+
+    if ("weights_init_type" in config): 
+        def init_weights(m, type='default'): 
+            if (isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d)) and hasattr(m, 'weight'): 
+                if type == 'xavier_uniform_': torch.nn.init.xavier_uniform_(m.weight.data)
+                elif type == 'normal_': torch.nn.init.normal_(m.weight.data, mean=0, std=0.02)
+                elif type == 'xavier_normal': torch.nn.init.xavier_normal(m.weight.data, gain=math.sqrt(2))
+                elif type == 'kaiming_normal': torch.nn.init.kaiming_normal(m.weight.data, a=0, mode='fan_in')
+                elif type == 'orthogonal': torch.nn.init.orthogonal(m.weight.data, gain=math.sqrt(2))
+                elif type == 'default': pass 
+        model.apply(lambda m: init_weights(m=m, type=config["weights_init_type"])) 
+
+    if config['training']['resume_training']:
+        run_id = config['training']['run_id']
+        model_dir = os.path.join("trained_models", run_id)
+        checkpoint_epoch = config['training']['checkpoint_epoch']
+        model.load_state_dict(torch.load(os.path.join(model_dir, f"model_checkpoint_epoch_{checkpoint_epoch}.pth")))
+        print(f"Resuming training from epoch {checkpoint_epoch}")
+
+    else:
+        # Create directory for saving models
+        run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        model_dir = os.path.join("trained_models", run_id)
+        os.makedirs(model_dir, exist_ok=True)
+        print(f"Saving models to directory: {model_dir}")
+        checkpoint_epoch = 0
     
     # Define optimizer
     if config['training']['optimizer'] == 'SGD':
@@ -136,25 +156,16 @@ def main():
     criterion = nn.CrossEntropyLoss()
     best_acc = 0.0
 
-    # Create directory for saving models
-    run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-    model_dir = os.path.join("trained_models", run_id)
-    os.makedirs(model_dir, exist_ok=True)
-    print(f"Saving models to directory: {model_dir}")
-
     # Save configuration
     with open(os.path.join(model_dir, "config.yaml"), "w") as f:
         yaml.safe_dump(config, f)
 
-    use_mixed_precision = config['training'].get('use_mixed_precision', False)
-    scaler = torch.amp.GradScaler(enabled=use_mixed_precision, device='cuda')
-    
     train_losses = []
     test_losses = []
 
-    for epoch in range(1, config['training']['epochs'] + 1):
-        train_loss = train(model, device, train_loader, optimizer, criterion, epoch, config, scaler)
-        test_loss, test_acc = evaluate(model, device, test_loader, criterion, use_mixed_precision)
+    for epoch in range(checkpoint_epoch + 1, checkpoint_epoch + config['training']['epochs'] + 1):
+        train_loss = train(model, device, train_loader, optimizer, criterion, epoch, config)
+        test_loss, test_acc = evaluate(model, device, test_loader, criterion)
         train_losses.append(train_loss)
         test_losses.append(test_loss)
         print(f"Epoch {epoch}: Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.2f}%")
@@ -198,7 +209,6 @@ def main():
         f.write(str(summary_str))
 
     print(f"Best Test Accuracy: {best_acc:.2f}%")
-
 
 if __name__ == "__main__":
     main()

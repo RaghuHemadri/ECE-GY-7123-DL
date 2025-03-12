@@ -6,6 +6,7 @@ import torchvision.transforms as transforms
 import pandas as pd
 import pickle
 from models import EfficientResNet
+from torchvision import models
 
 def load_cifar_batch(file):
     with open(file, 'rb') as fo:
@@ -13,7 +14,7 @@ def load_cifar_batch(file):
     return batch
 
 def main():
-    model_time = "20250302_191820"
+    model_time = "20250303_200119"
     model_dir = f"trained_models/{model_time}"
     # Load configuration
     with open(os.path.join(model_dir, "config.yaml"), "r") as f:
@@ -29,12 +30,23 @@ def main():
     test_transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize([0.4914, 0.4822, 0.4465],
-                             [0.2470, 0.2435, 0.2616])
+                             [0.2023, 0.1994, 0.2010])
     ])
 
     # Initialize model
     model = EfficientResNet(config).to(device)
     model.load_state_dict(torch.load(os.path.join(model_dir, "final_model.pth")))
+
+    # model_name = 'resnet50'
+    # if model_name == 'resnet50':
+    #     model = models.resnet50(pretrained=True)
+    # elif model_name == 'resnet101':
+    #     model = models.resnet101(pretrained=True)
+    # else:
+    #     raise ValueError(f"Unsupported model name: {model_name}")
+
+    # model = model.to(device)
+
     model.eval()
 
     # Perform inference
